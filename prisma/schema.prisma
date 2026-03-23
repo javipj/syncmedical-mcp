@@ -1,0 +1,46 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Specialty {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  doctors     Doctor[]
+}
+
+model Doctor {
+  id             String         @id @default(cuid())
+  name           String
+  specialtyId    String
+  specialty      Specialty      @relation(fields: [specialtyId], references: [id])
+  availabilities Availability[]
+  reservations   Reservation[]
+}
+
+model Availability {
+  id       String  @id @default(cuid())
+  doctorId String
+  doctor   Doctor  @relation(fields: [doctorId], references: [id])
+  date     String  // Format: YYYY-MM-DD
+  time     String  // Format: HH:mm
+  isBooked Boolean @default(false)
+
+  @@unique([doctorId, date, time])
+}
+
+model Reservation {
+  id           String   @id @default(cuid())
+  doctorId     String
+  doctor       Doctor   @relation(fields: [doctorId], references: [id])
+  patientName  String
+  patientPhone String
+  date         String   // Format: YYYY-MM-DD
+  time         String   // Format: HH:mm
+  createdAt    DateTime @default(now())
+}
