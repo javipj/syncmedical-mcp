@@ -159,11 +159,15 @@ mcp.setRequestHandler(CallToolRequestSchema, async (request) => {
   }
 });
 
-// Setup Express map
+// Setup Express app
 app.use(cors());
 
 // Auth middleware
 app.use((req, res, next) => {
+  if (req.method === 'OPTIONS') {
+    return next();
+  }
+
   const authHeader = req.headers.authorization || '';
   const xApiKey = (req.headers['x-api-key'] || '') as string;
   
@@ -175,20 +179,41 @@ app.use((req, res, next) => {
   next();
 });
 
-let transport: SSEServerTransport | null = null;
+const transports = new Map<string, SSEServerTransport>();
 
 app.get('/mcp/sse', async (req, res) => {
-  transport = new SSEServerTransport('/mcp/messages', res);
+  const transport = new SSEServerTransport('/mcp/messages', res);
+  transports.set(transport.sessionId, transport);
+  
   await mcp.connect(transport);
+
+  // Limpiar transporte al cerrar
+  req.on('close', () => {
+    transports.delete(transport.sessionId);
+  });
 });
 
-app.post('/mcp/messages', express.json(), async (req, res) => {
-  if (!transport) {
-    return res.status(500).json({ error: 'SSE Transport not completely initialized yet' });
+app.post('/mcp/messages', async (req, res) => {
+  const sessionId = req.query.sessionId as string;
+  
+  if (!sessionId) {
+    return res.status(400).send("Falta el sessionId en la URL.");
   }
-  await transport.handlePostMessage(req, res);
+
+  const transport = transports.get(sessionId);
+  if (!transport) {
+    return res.status(404).send("Transport respectivo de SSE no encontrado para esta sesión.");
+  }
+  
+  try {
+    // IMPORTANTE: No usar express.json() ya que SSEServerTransport hace el parsing internamente leyendo el stream.
+    await transport.handlePostMessage(req, res);
+  } catch (err) {
+    console.error("Error manejando POST message:", err);
+    res.status(500).send("Error de servidor interno");
+  }
 });
 
 app.listen(port, () => {
-  console.log(`Medical MCP server is running on port ${port} with SSE at /mcp/sse`);
+  console.log(`Medical MCP server is running on port ${port} con SSE endpoints listos.`);
 });
