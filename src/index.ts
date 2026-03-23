@@ -101,7 +101,37 @@ function createMcpServer() {
           where: { doctorId, date, isBooked: false },
           orderBy: { time: 'asc' },
         });
-        return { content: [{ type: 'text', text: JSON.stringify(availabilities, null, 2) }] };
+
+        if (availabilities.length > 0) {
+          return { content: [{ type: 'text', text: JSON.stringify(availabilities, null, 2) }] };
+        }
+
+        // Si no hay disponibilidad para esa fecha exacta, buscar los siguientes turnos disponibles de forma proactiva
+        const futureAvailabilities = await prisma.availability.findMany({
+          where: {
+            doctorId,
+            date: { gt: date }, // buscar fechas posteriores a la solicitada
+            isBooked: false
+          },
+          orderBy: [{ date: 'asc' }, { time: 'asc' }],
+          take: 10 // Traer hasta 10 franjas de dias futuros como alternativas
+        });
+
+        if (futureAvailabilities.length > 0) {
+          return { 
+            content: [{ 
+              type: 'text', 
+              text: `No hay horas disponibles para el día solicitado (${date}). Sin embargo, AQUÍ TIENES LAS ALTERNATIVAS MÁS PRÓXIMAS (usa obligatoriamente estos datos para proponer opciones al paciente): \n${JSON.stringify(futureAvailabilities, null, 2)}` 
+            }] 
+          };
+        }
+
+        return { 
+          content: [{ 
+            type: 'text', 
+            text: `No hay disponibilidad para la fecha solicitada (${date}), y tampoco hay franjas horarias futuras programadas para este médico en este momento.` 
+          }] 
+        };
       }
 
       if (name === 'make_reservation') {
