@@ -164,9 +164,13 @@ app.use(cors());
 
 // Auth middleware
 app.use((req, res, next) => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader || authHeader !== `Bearer ${API_KEY}`) {
-    return res.status(401).json({ error: 'Unauthorized, invalid or missing basic API_KEY in Authorization Bearer header.' });
+  const authHeader = req.headers.authorization || '';
+  const xApiKey = (req.headers['x-api-key'] || '') as string;
+  
+  // Checking if the API_KEY is present anywhere in either Authorization or x-api-key header
+  if (!authHeader.includes(API_KEY) && !xApiKey.includes(API_KEY)) {
+    console.warn(`[Auth Failed] Path: ${req.path} | Headers received:`, JSON.stringify(req.headers));
+    return res.status(401).json({ error: 'Unauthorized, invalid or missing API key.' });
   }
   next();
 });
